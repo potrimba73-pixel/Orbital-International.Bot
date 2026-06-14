@@ -1,84 +1,144 @@
-const { Events } = require('discord.js');
+// events/interactionCreate.js
+const { Events, InteractionType, MessageFlags } = require('discord.js');
+const UserProfile = require('../utils/models/UserProfile');
 
 module.exports = {
   name: Events.InteractionCreate,
   async execute(interaction, client) {
-    // Handler de botões
-    if (interaction.isButton()) {
-      // Botão Aceitar Regras
-      if (interaction.customId === 'aceitar_regras') {
-        const member = interaction.member;
-        const guild = interaction.guild;
+    // Handle slash commands
+    if (interaction.isChatInputCommand()) {
+      const command = client.commands.get(interaction.commandName);
+      if (!command) return;
 
-        // Verificar se já tem cargo Member
-        const memberRole = guild.roles.cache.find(r => r.name.toLowerCase() === 'member');
-
-        if (!memberRole) {
-          return interaction.reply({
-            content: '❌ Cargo **Member** não encontrado. Contacta um Staff.',
-            ephemeral: true
-          });
-        }
-
-        if (member.roles.cache.has(memberRole.id)) {
-          return interaction.reply({
-            content: '✅ Já aceitaste as regras anteriormente!',
-            ephemeral: true
-          });
-        }
-
-        try {
-          await member.roles.add(memberRole);
-
-          // Log no canal de logs (se existir)
-          const logChannel = guild.channels.cache.find(
-            c => c.name.toLowerCase().includes('logs') || c.name.toLowerCase().includes('audit')
-          );
-
-          if (logChannel) {
-            logChannel.send(
-              `✅ **${member.user.tag}** (ID: \`${member.id}\`) aceitou as regras e recebeu o cargo **Member**.`
-            );
+      try {
+        await command.execute(interaction, client);
+      } catch (error) {
+        console.error(`Error executing ${interaction.commandName}:`, error);
+        
+        if (interaction.replied || interaction.deferred) {
+          try {
+            await interaction.followUp({ 
+              content: 'There was an error executing this command!', 
+              flags: MessageFlags.Ephemeral 
+            });
+          } catch (e) {
+            console.error('Failed to send followUp:', e.message);
           }
-
-          await interaction.reply({
-            content: `🎉 Bem-vindo à estação espacial! Regras aceites. Cargo **Member** atribuído!`,
-            ephemeral: true
-          });
-        } catch (err) {
-          console.error('Erro ao atribuir cargo:', err);
-          await interaction.reply({
-            content: '❌ Erro ao atribuir cargo. Contacta um Staff.',
-            ephemeral: true
-          });
+        } else {
+          try {
+            await interaction.reply({ 
+              content: 'There was an error executing this command!', 
+              flags: MessageFlags.Ephemeral 
+            });
+          } catch (e) {
+            console.error('Failed to send reply:', e.message);
+          }
         }
-        return;
       }
     }
 
-    // Handler de comandos slash
-    if (!interaction.isChatInputCommand()) return;
+    // Handle modals (configme)
+    if (interaction.isModalSubmit()) {
+      if (interaction.customId === 'configme_modal') {
+        try {
+          const nativeLang = interaction.fields.getTextInputValue('native_language').toLowerCase();
+          const learningLang = interaction.fields.getTextInputValue('learning_language').toLowerCase();
+          const ageGroup = interaction.fields.getTextInputValue('age_group') || '';
+          const privacy = interaction.fields.getTextInputValue('privacy_setting')?.toLowerCase() || 'public';
+          const bio = interaction.fields.getTextInputValue('bio') || '';
 
-    const command = client.commands.get(interaction.commandName);
-    if (!command) {
-      console.error(`Comando ${interaction.commandName} não encontrado.`);
-      return;
+          // Validate languages
+          const validLangs = ['pt', 'en', 'ru', 'es', 'fr', 'de', 'it', 'ja', 'ko', 'zh'];
+          if (!validLangs.includes(nativeLang) || !validLangs.includes(learningLang)) {
+            return await interaction.reply({
+              content: '❌ Invalid language code. Use: PT, EN, RU, ES, FR, DE, IT, JA, KO, ZH',
+              flags: MessageFlags.Ephemeral
+            });
+          }
+
+          // Validate privacy
+          const validPrivacy = ['public', 'private'];
+          const finalPrivacy = validPrivacy.includes(privacy) ? privacy : 'public';
+
+          // Save to database
+          await UserProfile.findOneAndUpdate(
+            { userId: interaction.user.id },
+            {
+              userId: interaction.user.id,
+              nativeLanguage: nativeLang,
+              learningLanguage: learningLang,
+              ageGroup: ageGroup,
+              privacy: finalPrivacy,
+              bio: bio,
+              updatedAt: new Date()
+            },
+            { upsert: true, new: true }
+          );
+
+          await interaction.reply({
+            embeds: [{
+              title: '✅ Profile Updated!',
+              color: 0x57F287,
+              fields: [
+                { name: '🗣️ Native Language', value: nativeLang.toUpperCase(), inline: true },
+                { name: '📚 Learning Language', value: learningLang.toUpperCase(), inline: true },
+                { name: '🔒 Privacy', value: finalPrivacy === 'private' ? '🔒 Private' : '🌐 Public', inline: true },
+                { name: '🎂 Age Group', value: ageGroup || 'Not set', inline: true },
+                { name: '📝 Bio', value: bio || 'Not set', inline: false }
+              ],
+              footer: { text: 'Use /findpartner to find language partners!' }
+            }],
+            flags: MessageFlags.Ephemeral
+          });
+
+        } catch (error) {
+          console.error('Configme modal error:', error);
+          await interaction.reply({
+            content: '❌ Failed to save profile. Please try again.',
+            flags: MessageFlags.Ephemeral
+          });
+        }
+      }
     }
 
-    try {
-      await command.execute(interaction, client);
-    } catch (error) {
-      console.error(`Erro no comando ${interaction.commandName}:`, error);
+    // Handle buttons
+    if (interaction.isButton()) {
+      try {
+        if (!interaction.isRepliable()) return;
+        
+        // Handle verification button
+        if (interaction.customId === 'verify_member') {
+          const memberRoleId = process.env.MEMBER_ROLE_ID;
+          if (!memberRoleId || memberRoleId === 'your_member_role_id_here') {
+            return await interaction.reply({
+              content: '❌ Member role not configured. Contact a Staff member.',
+              flags: MessageFlags.Ephemeral
+            });
+          }
 
-      const errorReply = {
-        content: '❌ Ocorreu um erro ao executar este comando.',
-        ephemeral: true
-      };
+          const memberRole = interaction.guild.roles.cache.get(memberRoleId);
+          if (!memberRole) {
+            return await interaction.reply({
+              content: '❌ Member role not found. Contact a Staff member.',
+              flags: MessageFlags.Ephemeral
+            });
+          }
 
-      if (interaction.replied || interaction.deferred) {
-        await interaction.followUp(errorReply);
-      } else {
-        await interaction.reply(errorReply);
+          if (interaction.member.roles.cache.has(memberRoleId)) {
+            return await interaction.reply({
+              content: '✅ You already have the Member role!',
+              flags: MessageFlags.Ephemeral
+            });
+          }
+
+          await interaction.member.roles.add(memberRole);
+          await interaction.reply({
+            content: '✅ You have been verified! Welcome to Orbital International!',
+            flags: MessageFlags.Ephemeral
+          });
+        }
+      } catch (error) {
+        console.error('Button interaction error:', error.message);
       }
     }
   }
