@@ -1,4 +1,4 @@
-const { Client, Collection, GatewayIntentBits, Partials, Events } = require('discord.js');
+const { Client, Collection, GatewayIntentBits, Partials } = require('discord.js');
 const fs = require('fs');
 const path = require('path');
 require('dotenv').config();
@@ -21,7 +21,7 @@ const client = new Client({
 client.commands = new Collection();
 client.cooldowns = new Collection();
 
-// Carregar Comandos
+// Load Commands
 const commandsPath = path.join(__dirname, 'commands');
 if (fs.existsSync(commandsPath)) {
   const commandFiles = fs.readdirSync(commandsPath).filter(file => file.endsWith('.js'));
@@ -31,17 +31,17 @@ if (fs.existsSync(commandsPath)) {
       const command = require(filePath);
       if ('data' in command && 'execute' in command) {
         client.commands.set(command.data.name, command);
-        console.log(`✅ Comando carregado: ${command.data.name}`);
+        console.log(`✅ Command loaded: ${command.data.name}`);
       } else {
-        console.warn(`⚠️ Comando ${file} sem "data" ou "execute"`);
+        console.warn(`⚠️ Command ${file} missing "data" or "execute"`);
       }
     } catch (err) {
-      console.error(`❌ Erro ao carregar comando ${file}:`, err.message);
+      console.error(`❌ Error loading command ${file}:`, err.message);
     }
   }
 }
 
-// Carregar Eventos
+// Load Events
 const eventsPath = path.join(__dirname, 'events');
 if (fs.existsSync(eventsPath)) {
   const eventFiles = fs.readdirSync(eventsPath).filter(file => file.endsWith('.js'));
@@ -54,70 +54,21 @@ if (fs.existsSync(eventsPath)) {
       } else {
         client.on(event.name, (...args) => event.execute(...args, client));
       }
-      console.log(`✅ Evento carregado: ${event.name}`);
+      console.log(`✅ Event loaded: ${event.name}`);
     } catch (err) {
-      console.error(`❌ Erro ao carregar evento ${file}:`, err.message);
+      console.error(`❌ Error loading event ${file}:`, err.message);
     }
   }
 }
 
-// Handler de botões global (backup)
-client.on(Events.InteractionCreate, async (interaction) => {
-  if (!interaction.isButton()) return;
-
-  if (interaction.customId === 'aceitar_regras') {
-    const member = interaction.member;
-    const guild = interaction.guild;
-
-    const memberRole = guild.roles.cache.find(r => r.name.toLowerCase() === 'member');
-
-    if (!memberRole) {
-      return interaction.reply({
-        content: '❌ Cargo **Member** não encontrado. Contacta um Staff.',
-        ephemeral: true
-      });
-    }
-
-    if (member.roles.cache.has(memberRole.id)) {
-      return interaction.reply({
-        content: '✅ Já aceitaste as regras anteriormente!',
-        ephemeral: true
-      });
-    }
-
-    try {
-      await member.roles.add(memberRole);
-
-      const logChannel = guild.channels.cache.find(
-        c => c.name.toLowerCase().includes('logs') || c.name.toLowerCase().includes('audit')
-      );
-
-      if (logChannel) {
-        logChannel.send(
-          `✅ **${member.user.tag}** (ID: \`${member.id}\`) aceitou as regras e recebeu o cargo **Member**.`
-        );
-      }
-
-      await interaction.reply({
-        content: `🎉 Bem-vindo à estação espacial! Regras aceites. Cargo **Member** atribuído!`,
-        ephemeral: true
-      });
-    } catch (err) {
-      console.error('Erro ao atribuir cargo:', err);
-      await interaction.reply({
-        content: '❌ Erro ao atribuir cargo. Contacta um Staff.',
-        ephemeral: true
-      });
-    }
-  }
-});
-
+// Error handlers
 process.on('unhandledRejection', (err) => {
   console.error('Unhandled Rejection:', err);
 });
 
 process.on('uncaughtException', (err) => {
   console.error('Uncaught Exception:', err);
+  // Don't exit - let the bot continue running
 });
 
 client.login(process.env.DISCORD_TOKEN);
