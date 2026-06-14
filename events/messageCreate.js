@@ -1,4 +1,4 @@
-const UserProfile = require('../models/UserProfile');
+const UserProfile = require('../utils/models/UserProfile');
 
 const xpCooldown = new Map();
 const COOLDOWN_MS = 60000;
@@ -36,7 +36,7 @@ module.exports = {
       xpCooldown.set(userId, now);
 
     } catch (err) {
-      // Silencioso
+      console.error('XP error:', err.message);
     }
   }
 };
