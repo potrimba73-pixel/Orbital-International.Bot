@@ -1,20 +1,10 @@
 const { Events, InteractionType, MessageFlags } = require('discord.js');
-
-// FIX: Import from correct path - use ONLY one path everywhere
-let UserProfile;
-try {
-  UserProfile = require('../models/UserProfile');
-} catch (e) {
-  try {
-    UserProfile = require('../utils/models/UserProfile');
-  } catch (e2) {
-    console.error('❌ UserProfile model not found in expected paths');
-  }
-}
+const UserProfile = require('../utils/models/UserProfile');
 
 module.exports = {
   name: Events.InteractionCreate,
   async execute(interaction, client) {
+
     // Handle slash commands
     if (interaction.isChatInputCommand()) {
       const command = client.commands.get(interaction.commandName);
@@ -71,21 +61,19 @@ module.exports = {
           const finalPrivacy = validPrivacy.includes(privacy) ? privacy : 'public';
 
           // Save to database
-          if (UserProfile) {
-            await UserProfile.findOneAndUpdate(
-              { userId: interaction.user.id },
-              {
-                userId: interaction.user.id,
-                nativeLanguage: nativeLang,
-                learningLanguage: learningLang,
-                ageGroup: ageGroup,
-                privacy: finalPrivacy,
-                bio: bio,
-                updatedAt: new Date()
-              },
-              { upsert: true, new: true }
-            );
-          }
+          await UserProfile.findOneAndUpdate(
+            { userId: interaction.user.id },
+            {
+              userId: interaction.user.id,
+              nativeLanguage: nativeLang,
+              learningLanguage: learningLang,
+              ageGroup: ageGroup,
+              privacy: finalPrivacy,
+              bio: bio,
+              updatedAt: new Date()
+            },
+            { upsert: true, new: true }
+          );
 
           await interaction.reply({
             embeds: [{
