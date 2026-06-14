@@ -15,4 +15,5 @@ const userProfileSchema = new mongoose.Schema({
   updatedAt: { type: Date, default: Date.now }
 });
 
-module.exports = mongoose.model('UserProfile', userProfileSchema);
+// FIX: Prevent "Cannot overwrite model once compiled" error
+module.exports = mongoose.models.UserProfile || mongoose.model('UserProfile', userProfileSchema);
